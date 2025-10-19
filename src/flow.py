@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, field
+import sys
 import logging
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional, List, Dict
 from transitions import Machine
@@ -40,10 +41,9 @@ class Flow:
              "feature_detecting", "fetch_last_version", "update_article", "generate_article", "end"]
     flow_state = FlowState()
     machine:Machine = None
-
     session : Session = None
     markdown_handler = MarkdownHandler()
-
+    logger: logging.Logger = None
 
     def __init__(self, connection: DBConnection, initial="start"):
         self.dbconnection = connection
@@ -62,13 +62,15 @@ class Flow:
         self.machine.add_transition("next", "feature_detecting", "end")
 
 
-        ## Log configuration
-        logger = logging.getLogger()
-        logger.setLevel(logging.DEBUG)
-        for name in ["sqlalchemy", "sqlalchemy.engine", "sqlalchemy.pool"]:
-            logging.getLogger(name).setLevel(logging.ERROR)
-            logging.getLogger(name).propagate = False
-
+        ## log configuration
+        logging.getLogger("transitions").disabled = True
+        logging.getLogger("transitions.core").disabled = True
+        logging.getLogger("agents").setLevel(logging.ERROR)
+        logging.getLogger("agents").propagate = False
+        logging.getLogger("httpx").setLevel(logging.WARNING)
+        logging.getLogger("openai").setLevel(logging.WARNING)
+        self.logger = logging.getLogger("Flow")
+        logging.basicConfig(level=logging.INFO, stream=sys.stdout, format=" -[%(levelname)s]: %(message)s" )
 
     def run(self):
         self.next()
@@ -94,33 +96,36 @@ class Flow:
         handler = ConfluenceService()
         handler.set_file_path(str(self.flow_state.pdf_path))
         self.flow_state.raw_text = handler.process_pdf()
-        print("Phase 1: the selected file is processed for removing the irrelevant sections")
-        print("==========================================\n")
+        self.logger.info(f"Extracting the raw text.")
         self.next()
 
     def on_enter_well_forming(self):
         raw_text = self.flow_state.raw_text
-        print("\nLLM agent calling for well forming. Please wait ...")
+        self.logger.info("Well-forming the raw text.")
+        self.logger.info(f"Calling LLM Agent ...")
         self.flow_state.well_formed_text = DocumentCleanerAgent().invoke(text=raw_text, context=None, history=None)
-        print("\nPhase 2: Cleaned and well-formed Markdown of selected document is prepared.\n")
+        self.logger.info(f"Well forming has been completed.")
         self.next()
 
     def on_enter_print_source(self):
-        answer = self.ask("Do you want to see the well-formed text?")
+        answer = self.ask_yes_no("Do you want to see the well-formed text?")
         if answer:
+            print("=======================================================")
+            print("Well form text extracted from selected file:\n\n")
             print(self.flow_state.well_formed_text)
-        print("==========================================\n")
+            print("\n\n=======================================================")
         self.next()
 
     def on_enter_feature_detecting(self):
-        print("\n LLM agent calling for feature detection. Please wait ...")
+        self.logger.info(f"Detecting the feature")
+        self.logger.info(f"Calling LLM Agent ... ")
         well_formed_text = self.flow_state.well_formed_text
         context = FeatureRepository(self.session).get_names()
         feature_json = FeatureDetectorAgent().invoke(text=well_formed_text, context=context, history=None)
         feature = FeatureRepository(self.session).find_by_json(feature_json)
         self.flow_state.feature = feature
-        print(f"\n Feature detected: {feature.name}, Subject: {feature.subject.name}")
-        print("==========================================\n")
+        self.logger.info(f"Feature has been detected: {feature.name}")
+        self.logger.info(f"Subject has been detected: {feature.subject.name}")
         self.next()
 
     def on_enter_generate_articles(self):

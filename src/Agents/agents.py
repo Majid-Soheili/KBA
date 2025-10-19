@@ -17,7 +17,7 @@ class BaseAgent:
             raise ValueError("OPEN_API_KEY environment variable not set.")
 
         self.llm = ChatOpenAI(model=self._model_name, temperature=0, api_key=self._api_key)
-        self.logger = logging.getLogger(f"{__name__}.{self.name}")
+        self.logger = logging.getLogger(f"agents.{self.name}")
         self.logger.setLevel(logging.DEBUG)
 
     def invoke(self, text: str, context: Optional[str], history: Optional[str]):
