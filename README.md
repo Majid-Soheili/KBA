@@ -49,17 +49,33 @@ Follow these steps to set up and run the **Knowledge Base Automation** project l
 ### 3. Run the Knowledge Base Automation Flow
 You can run the full workflow (PDF → text → cleaned Markdown → KB draft) using:
 
-    python src/Flow.py
+    python src/flow.py
     
 Example output:
 ```text
 ==========================================
- Welcome to KB Automation (CLI)
+ Welcome to Drooms – KB Automation (CLI) 
 ==========================================
 
-Please enter your PDF path: ./docs/feature_update.pdf
-PDF found: ./docs/feature_update.pdf
-[INFO] Parsing document...
-[INFO] Cleaning sections...
-[INFO] Extracting feature metadata...
-[INFO] Generating draft Knowledge Base article...
+Please enter your PDF: PROD-Duplicate_Detection-120925-214047.pdf
+PDF found: PROD-Duplicate_Detection-120925-214047.pdf
+ -[INFO]: Extracting the raw text.
+ -[INFO]: Well-forming the raw text.
+ -[INFO]: Calling LLM Agent ...
+ -[INFO]: Well forming has been completed.
+Do you want to edit the well-formed text? (Y/n): n
+ -[INFO]: Detecting the feature
+ -[INFO]: Calling LLM Agent ... 
+ -[INFO]: Feature has been detected: Searching and Filtering
+ -[INFO]: Subject has been detected: Main Functionality
+Do you want to edit feature and subject? (Y/n): n
+ -[INFO]: For feature: Searching and Filtering,a article type "FAQ" already exists.
+ -[INFO]: Updating the product's document context.
+ -[INFO]: Calling LLM Agent ... 
+ -[INFO]: Updating FAQ article content...
+ Do you want to edit the product's document content? (Y/n): n
+ -[INFO]: Calling LLM Agent ... 
+ -[INFO]: Article FAQ generated successfully.
+ -[INFO]: Calling LLM Agent ... 
+ Do you want to edit the KB article content? (Y/n): n
+The FAQ Article has been generated: Main Functionality_Searching and Filtering_FAQ_V3.pdf
