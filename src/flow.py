@@ -5,6 +5,7 @@ import sys
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
+from enum import IntEnum
 from typing import Optional, List, Dict
 from transitions import Machine
 
@@ -24,6 +25,7 @@ from src.Agents.ArticleAgentFactory import ArticleAgentFactory
 from src.service.markdown import MarkdownHandler
 
 
+
 @dataclass
 class FlowState:
     pdf_path: Path = None
@@ -38,17 +40,18 @@ class FlowState:
 
 class Flow:
     nodes = ["start", "welcome","get_pdf", "pars_pdf", "well_forming", "print_source",
-             "feature_detecting", "fetch_last_version", "update_article", "generate_article", "end"]
+             "feature_detecting", "edit_feature", "generate_articles", "end"]
     flow_state = FlowState()
     machine:Machine = None
     session : Session = None
-    markdown_handler = MarkdownHandler()
     logger: logging.Logger = None
+    article_kinds = {1:"FAQ", 2:"Troubleshooting", 3:"Tutorials"}
 
     def __init__(self, connection: DBConnection, initial="start"):
         self.dbconnection = connection
         self.session = Session(self.dbconnection.engine)
         self.machine = Machine(model=self, states=self.nodes, initial=initial)
+        self.markdown_handler = MarkdownHandler()
 
         self.machine.add_transition("next", "start", dest="welcome")
         self.machine.add_transition("next", "welcome", dest="get_pdf")
@@ -58,8 +61,9 @@ class Flow:
         self.machine.add_transition("next", "pars_pdf", "well_forming")
         self.machine.add_transition("next", "well_forming", "print_source")
         self.machine.add_transition("next", "print_source", "feature_detecting")
-        self.machine.add_transition("next", "feature_detecting", "fetch_last_version")
-        self.machine.add_transition("next", "feature_detecting", "end")
+        self.machine.add_transition("next", "feature_detecting", "edit_feature")
+        self.machine.add_transition("next", "edit_feature", "generate_articles")
+        self.machine.add_transition("next", "generate_articles", "end")
 
 
         ## log configuration
@@ -108,7 +112,7 @@ class Flow:
         self.next()
 
     def on_enter_print_source(self):
-        answer = self.ask_yes_no("Do you want to see the well-formed text?")
+        answer = self.ask_yes_no("Do you want to edit the well-formed text?")
         if answer:
             print("=======================================================")
             print("Well form text extracted from selected file:\n\n")
@@ -128,23 +132,47 @@ class Flow:
         self.logger.info(f"Subject has been detected: {feature.subject.name}")
         self.next()
 
+    def on_enter_edit_feature(self):
+        answer = self.ask_yes_no("Do you want to edit feature and subject?")
+        if answer:
+            print("=======================================================")
+            print("The feature and subjected are detected:\n\n")
+            print(self.flow_state.feature)
+            print(self.flow_state.feature.subject)
+            print("\n\n=======================================================")
+        self.next()
+
     def on_enter_generate_articles(self):
         feature = self.flow_state.feature
         session = Session(self.dbconnection.engine)
         well_formed_text = self.flow_state.well_formed_text
         for article_type in feature.article_types:
+
+            article_type_name = self.article_kinds[article_type.type_id]
             last_version_article = ArticleRepository(session).get_article(feature.name, article_type.type_id)
+
             if last_version_article: # The new document and article will be combined with the last version
-                last_document_text = self.markdown_handler.load(last_version_article.hash_file_document)
-                last_article_text = self.markdown_handler.load(last_version_article.hash_file_article)
+                self.logger.info(f"For feature: {feature.name},a article type \"{article_type_name}\" already exists.")
+
+                last_document_text = self.markdown_handler.load(last_version_article.hash_file_document).get_text()
+                last_article_text = self.markdown_handler.load(last_version_article.hash_file_article).get_text()
+
+                self.logger.info("Updating the product's document context.")
+                self.logger.info(f"Calling LLM Agent ... ")
                 new_document_text = DocumentMergeAgent().invoke(text=well_formed_text, history=last_document_text, context=None)
+
+                self.logger.info(f"Updating {article_type_name} article content...")
+                self.logger.info(f"Calling LLM Agent ... ")
                 new_article_text = ArticleAgentFactory(article_type = article_type.type_id,  text = well_formed_text, history= last_article_text).generate_article()
+
             else:
+                self.logger.info(f"Generating \"{article_type_name}\" article content...")
+                self.logger.info(f"Calling LLM Agent ... ")
                 new_document_text = well_formed_text
                 new_article_text = ArticleAgentFactory(article_type = article_type.type_id,  text = well_formed_text, history= None).generate_article()
 
-            document_hash_file = self.markdown_handler.set_text(new_document_text).save()
-            article_hash_file = self.markdown_handler.set_text(new_article_text).save()
+            document_hash_file = self.markdown_handler.set_text(new_document_text).save().get_hash()
+            article_hash_file = self.markdown_handler.set_text(new_article_text).save().get_hash()
 
 
             if last_version_article: # Update the last version
@@ -160,7 +188,12 @@ class Flow:
             session.add(article)
             session.commit()
 
-            print(f"\nArticle {article.hash_file_document} has been generated.")
+            article_file_name = f"{feature.subject.name}_{feature.name}_{article_type_name}_V{article.version}.pdf"
+            self.markdown_handler.load(article.hash_file_article).convert_to_pdf(article_file_name)
+
+            self.logger.info(f"Article {article_type_name} generated successfully.")
+            self.logger.info(f"Calling LLM Agent ... ")
+            print(f"The {article_type_name} Article has been generated: {article_file_name}")
 
     # Guards functions ===============================================
     def source_exist(self) -> bool:
