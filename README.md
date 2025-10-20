@@ -43,9 +43,11 @@ Follow these steps to set up and run the **Knowledge Base Automation** project l
     pip install -r requirements.txt
 ### 2. Configure Environment Variables
     Create a .env file in the project root:
-    DB_URL=sqlite:///db.sqlite3
-    CONFLUENCE_API_KEY=your_key_here
-    OPENAI_API_KEY=your_key_here
+    OPEN_API_KEY=''
+    EMBEDDINGS_MODEL=''
+    PROMPTS_MODEL_NAME=''
+    DB_PATH=''
+    HASH_PATH=''
 ### 3. Run the Knowledge Base Automation Flow
 You can run the full workflow (PDF → text → cleaned Markdown → KB draft) using:
 
