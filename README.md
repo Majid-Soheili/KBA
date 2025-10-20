@@ -20,7 +20,7 @@
 - **Version-Aware Syncing**  
   Detects changes between document versions to update only the affected KB sections.
 
-## Architecture (updated)
+## Architecture
 
 - **SQLite** – Lightweight database used as the primary datastore for metadata and article management (dev-friendly, file-based).
 - **SQLModel** – ORM/typed layer (built on SQLAlchemy + Pydantic) to define models (classes) and map them to SQLite tables; handles schema, queries, and migrations scaffolding.
@@ -79,3 +79,7 @@ Do you want to edit feature and subject? (Y/n): n
  -[INFO]: Calling LLM Agent ... 
  Do you want to edit the KB article content? (Y/n): n
 The FAQ Article has been generated: Main Functionality_Searching and Filtering_FAQ_V3.pdf
+```
+
+## Future
+[KBA-Visual.pdf](KBA-Visual.pdf)
